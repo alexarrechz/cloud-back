@@ -15,9 +15,28 @@ router.post('/', async (req, res) => {
     res.status(201).json(newUser);
 });
 
-router.get('/', async (req, res) => {
+router.get('/all', async (req, res) => {
     const users = await User.find();
     res.json(users);
 });
 
+router.get('/', async (req, res) => {
+    const token = req.headers['authorization'];
+    console.log(token);
+    const userResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: {
+            Authorization: `${token}`,
+        },
+    });
+    const googleUser = await userResponse.json();
+
+    const user = await User.findOne({ email: googleUser.email });
+
+    if (!user) {                
+        const newUser = new User({ companyName: googleUser.name, phone: googleUser?.phone, email: googleUser.email, schedule: [], picture: googleUser.picture});
+        await newUser.save();
+        res.status(201).json(newUser);
+    }
+    else res.json(user);
+});
 module.exports = router;
