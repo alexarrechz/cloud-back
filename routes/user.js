@@ -22,7 +22,9 @@ router.get('/all', async (req, res) => {
 
 router.get('/', async (req, res) => {
     const token = req.headers['authorization'];
-    console.log(token);
+
+    if (!token) return res.status(401).json({ message: 'No token provided' });
+
     const userResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: {
             Authorization: `${token}`,
@@ -32,8 +34,8 @@ router.get('/', async (req, res) => {
 
     const user = await User.findOne({ email: googleUser.email });
 
-    if (!user) {                
-        const newUser = new User({ companyName: googleUser.name, phone: googleUser?.phone, email: googleUser.email, schedule: [], picture: googleUser.picture});
+    if (!user) {
+        const newUser = new User({ companyName: googleUser.name, phone: googleUser?.phone, email: googleUser.email, schedule: [], picture: googleUser.picture });
         await newUser.save();
         res.status(201).json(newUser);
     }
