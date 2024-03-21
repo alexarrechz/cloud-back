@@ -28,9 +28,15 @@ router.get('/', async (req, res) => {
             Authorization: `${token}`,
         },
     });
-    const { email } = await userResponse.json();
+    const googleUser = await userResponse.json();
 
-    const user = await User.findOne({ email });
-    res.json(user);
+    const user = await User.findOne({ email: googleUser.email });
+
+    if (!user) {                
+        const newUser = new User({ companyName: googleUser.name, phone: googleUser?.phone, email: googleUser.email, schedule: [], picture: googleUser.picture});
+        await newUser.save();
+        res.status(201).json(newUser);
+    }
+    else res.json(user);
 });
 module.exports = router;
