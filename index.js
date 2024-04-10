@@ -4,6 +4,7 @@ const cors = require('cors')
 const user = require('./routes/user');
 const { createServer } = require('node:http');
 const { Server } = require('socket.io');
+const verifyToken = require('./middlewares/verifyToken');
 
 require('dotenv').config();
 const app = express();
@@ -26,9 +27,9 @@ app.get('/', (req, res) => {
     res.send('¡Hola Mundo!');
 });
 
-app.get('/conversations', (req, res) => {
+app.get('/conversations', verifyToken, (req, res) => {
     console.log("pidiendo conversaciones", conversations);
-    res.json(conversations);
+    res.json(conversations.filter((conversation) => conversation.companyID === req.user._id));
 });
 
 app.get('/conversations/:id', (req, res) => {
@@ -41,23 +42,28 @@ app.get('/conversations/:id', (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log('Usuario conectado');
+    socket.on('company', (user) => {
+        console.log('Empresa conectada', user);
+        socket.join(user._id);
+    });
 
     socket.on('disconnect', () => {
         console.log('Usuario desconectado');
     });
 
     socket.on('chat message', (msg) => {
+        console.log('Mensaje recibido', msg);
         const conversation = conversations.find((conversation) => conversation.id === msg.conversation);
         if(!conversation) {
-            const newConversation = {id: msg.conversation, messages: [msg]}
+            const newConversation = {id: msg.conversation, companyID: msg.companyID ,messages: [msg]}
+            socket.join(msg.companyID);
             conversations.push(newConversation)
-            io.emit('new conversation', newConversation);
+            io.to(msg.companyID).emit('new conversation', newConversation);
         }
         else {
-            console.log('Conversation', conversation.messages, msg);
+            console.log('Conversation', conversation.messages);
             conversation.messages.push(msg);
-            io.emit('new message', msg);
+            io.to(msg.companyID).emit('new message', msg);
         }
         console.log('Final conversation', JSON.stringify(conversations.find((conversation) => conversation.id === msg.conversation)));
     });
