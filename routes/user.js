@@ -20,9 +20,9 @@ router.get('/all', async (req, res) => {
     res.json(users);
 });
 
-router.get('/:username', async (req, res) => {
-    if (!req.params.username) return res.status(400).json({ message: 'No username provided' });
-    const user = await User.findOne({ companyName: new RegExp(`^${req.params.username}$`, 'i') });
+router.get('/:id', async (req, res) => {
+    if (!req.params.id) return res.status(400).json({ message: 'No id provided' });
+    const user = await User.findOne({ _id: req.params.id });
     console.log(user);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
