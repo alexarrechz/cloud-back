@@ -1,3 +1,5 @@
+const User = require('../models/user');
+
 const addUser = async (req, res) => {
     const { companyName, phone, email, schedule, picture } = req.body;
     const existingUser = await User.findOne({ email });
