@@ -1,4 +1,8 @@
+require('dotenv').config();
 const User = require('../models/user');
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
+
+const plan = 'price_1PJmgDCTfeGF4JbWnLe5aEyU';
 
 const addUser = async (req, res) => {
     const { companyName, phone, email, schedule, picture } = req.body;
@@ -30,9 +34,38 @@ const getUser = async (req, res) => {
     res.json(req.user);
 }
 
+const subscribe = async (req, res) => {
+    const { customerId } = req.body;
+
+    try {
+        const session = await stripe.checkout.sessions.create({
+            mode: 'subscription',
+            payment_method_types: ['card'],
+            line_items: [
+                {
+                    price: plan,
+                    quantity: 1,
+                },
+            ],
+            success_url: `${process.env.REDIRECT_URI}/mas/success`,
+            cancel_url: `${process.env.REDIRECT_URI}/mas/cancel`,
+            customer: customerId,
+        });
+
+        console.log(session);
+
+        res.json({ session });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+
+    }
+
+}
+
 module.exports = {
     addUser,
     getAllUsers,
     getUsersByID,
     getUser,
+    subscribe,
 };
