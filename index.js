@@ -65,7 +65,7 @@ io.on('connection', (socket) => {
                 const savedConversation = await newConversationDB.save();
                 socket.join(savedConversation._id.toString());
                 io.to(msg.companyID).emit('new conversation', savedConversation);
-                io.to(savedConversation._id).emit('new conversation', savedConversation);
+                io.to(savedConversation._id.toString()).emit('new conversation', savedConversation);
             }
             else {
                 const savedConversation = await Conversation.updateOne({_id: conversation._id}, { messages: [...conversation.messages, msg] });
