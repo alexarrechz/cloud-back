@@ -5,6 +5,7 @@ const User = require('../models/user');
 const client = new OAuth2Client(process.env.CLIENT_ID);
 
 const verifyToken = async (req, res, next) => {
+    if (!req.headers['authorization']) return res.status(401).json({ message: 'No token provided' });
     const token = req.headers['authorization'].split(' ')[1];
 
     console.log(token);
