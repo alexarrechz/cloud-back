@@ -57,20 +57,22 @@ io.on('connection', (socket) => {
     })
 
     socket.on('chat message', async (msg) => {
-        console.log('Mensaje recibido', msg.content);
-        const conversation = await Conversation.findOne({ id: msg.conversation });
-        if (!conversation) {
-            const newConversation = { id: msg.conversation, companyID: msg.companyID, user: msg.user, messages: [msg] }
-            socket.join(msg.conversation);
-            const newConversationDB = new Conversation(newConversation);
-            await newConversationDB.save();
-            io.to(msg.companyID).emit('new conversation', newConversation);
-        }
-        else {
-            conversation.messages.push(msg);
-
-            await Conversation.updateOne({ id: msg.conversation }, { messages: conversation.messages });
-            io.to(msg.conversation).emit('new message', msg);
+        try {
+            const conversation = msg.conversation ? await Conversation.findOne({ _id: msg.conversation }) : null;
+            if (!conversation) {
+                const newConversation = { companyID: msg.companyID, user: msg.user, messages: [msg] }
+                const newConversationDB = new Conversation(newConversation);
+                const savedConversation = await newConversationDB.save();
+                socket.join(savedConversation._id.toString());
+                io.to(msg.companyID).emit('new conversation', savedConversation);
+                io.to(savedConversation._id).emit('new conversation', savedConversation);
+            }
+            else {
+                const savedConversation = await Conversation.updateOne({_id: conversation._id}, { messages: [...conversation.messages, msg] });
+                io.to(conversation._id.toString()).emit('new message', msg);
+            }
+        } catch (error) {
+            console.error(error);
         }
     });
 });
