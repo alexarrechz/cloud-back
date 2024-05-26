@@ -16,14 +16,8 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: 'es'
     },
-    schedule: {
-        type: [Object],
-        properties: {
-            type: { type: String, required: true },
-            days: { type: [String], required: true },
-            openingTime: { type: String, required: true },
-            closingTime: { type: String, required: true }
-        }
+    description: {
+        type: String,
     },
     picture : {
         type: String
