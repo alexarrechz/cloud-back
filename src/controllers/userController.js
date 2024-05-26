@@ -34,6 +34,13 @@ const getUser = async (req, res) => {
     res.json(req.user);
 }
 
+const updateUser = async (req, res) => {
+    console.log(req.body);
+    const { companyName, phone, description, picture } = req.body;
+    const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { companyName, phone, description, picture }, { new: true });
+    res.json(user);
+}
+
 const subscribe = async (req, res) => {
     console.log("Usuario", req.user);
     try {
@@ -133,11 +140,18 @@ const stripeProducts = async (req, res) => {
         const user = await User.findOne({ _id: req.user._id.toString() });
 
         const stripe_account = await stripe.accounts.retrieve(user.stripeAccount);
-        console.log(stripe_account);
 
         const products = await stripe.products.list({
             stripeAccount: stripe_account.id,
         });
+
+        for(let i = 0; i < products.data.length; i++){
+            const prices = await stripe.prices.list(products.data[i].defaul_price,{
+                stripeAccount: stripe_account.id,
+            });
+            products.data[i].prices = prices.data[0];
+        }
+
         console.log(products);
         res.json(products);
     } catch (error) {
@@ -180,6 +194,7 @@ const checkout = async (req, res) => {
 
 module.exports = {
     addUser,
+    updateUser,
     getAllUsers,
     getUsersByID,
     getUser,
