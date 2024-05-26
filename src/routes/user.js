@@ -1,9 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const verifyToken = require('../middlewares/verifyToken');
-const { getUser, getUsersByID, getAllUsers, addUser, subscribe, subscribed, stripeAccountLink, stripeAccount, stripeProducts, checkout } = require('../controllers/userController');
+const { getUser, getUsersByID, getAllUsers, addUser, subscribe, subscribed, stripeAccountLink, stripeAccount, stripeProducts, checkout, updateUser } = require('../controllers/userController');
 
 router.post('/', addUser);
+router.patch('/', verifyToken, updateUser);
 router.get('/all', getAllUsers);
 router.get('/subscribed', verifyToken, subscribed);
 
