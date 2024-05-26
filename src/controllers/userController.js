@@ -35,8 +35,7 @@ const getUser = async (req, res) => {
 }
 
 const subscribe = async (req, res) => {
-    const { customerId } = req.body;
-
+    console.log("Usuario", req.user);
     try {
         const session = await stripe.checkout.sessions.create({
             mode: 'subscription',
@@ -49,17 +48,134 @@ const subscribe = async (req, res) => {
             ],
             success_url: `${process.env.REDIRECT_URI}/mas/success`,
             cancel_url: `${process.env.REDIRECT_URI}/mas/cancel`,
-            customer: customerId,
         });
 
         console.log(session);
 
+        // Update user subscription status
+        const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { subscribed: true }, { new: true });
+        console.log(user);
         res.json({ session });
     } catch (error) {
         res.status(500).json({ error: error.message });
-
     }
+}
 
+const subscribed = async (req, res) => {
+    try {
+        const user = await User.findOne({ _id: req.user._id.toString() });
+        res.json({ subscribed: user.subscribed });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
+const stripeAccount = async (req, res) => {
+    try {
+        const user = await User.findOne({ _id: req.user._id.toString() });
+
+        if (user.stripeAccount) {
+            return res.json({
+                account: user.stripeAccount,
+                linked: true,
+            });
+        }
+
+        const account = await stripe.accounts.create({});
+        console.log(account);
+        
+        await User.findOneAndUpdate({ _id: req.user._id.toString() }, { stripeAccount: account.id });
+
+        res.json({
+            account: account.id,
+            linked: false,
+        });
+    } catch (error) {
+        console.error(
+            "An error occurred when calling the Stripe API to create an account",
+            error
+        );
+        res.status(500);
+        res.send({ error: error.message });
+    }
+}
+
+const stripeAccountLink = async (req, res) => {
+    try {
+
+        const user = await User.findOne({ _id: req.user._id.toString() });
+        console.log("link",user);
+
+        if (!user.stripeAccount) {
+            return res.status(400).json({ error: "User does not have a Stripe account" });
+        }
+
+        const accountLink = await stripe.accountLinks.create({
+            account: user.stripeAccount,
+            return_url: `${req.headers.origin}/return/${user.stripeAccount}`,
+            refresh_url: `${req.headers.origin}/refresh/${user.stripeAccount}`,
+            type: "account_onboarding",
+        });
+
+        res.json(accountLink);
+    } catch (error) {
+        console.error(
+            "An error occurred when calling the Stripe API to create an account link:",
+            error
+        );
+        res.status(500);
+        res.send({ error: error.message });
+    }
+}
+
+const stripeProducts = async (req, res) => {
+    try {
+        const user = await User.findOne({ _id: req.user._id.toString() });
+
+        const stripe_account = await stripe.accounts.retrieve(user.stripeAccount);
+        console.log(stripe_account);
+
+        const products = await stripe.products.list({
+            stripeAccount: stripe_account.id,
+        });
+        console.log(products);
+        res.json(products);
+    } catch (error) {
+        console.error(
+            "An error occurred when calling the Stripe API to list products:",
+            error
+        );
+        res.status(500);
+        res.send({ error: error.message });
+    }
+}
+
+const checkout = async (req, res) => {
+    const { priceId } = req.body;
+    try {
+        const session = await stripe.checkout.sessions.create({
+            mode: 'payment',
+            payment_method_types: ['card'],
+            line_items: [
+                {
+                    price: priceId,
+                    quantity: 1,
+                },
+            ],
+            success_url: `${process.env.REDIRECT_URI}/mas/success`,
+            cancel_url: `${process.env.REDIRECT_URI}/mas/cancel`,
+            
+        }, { stripeAccount: req.user.stripeAccount });
+
+        console.log(session);
+
+        // Update user subscription status
+        const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { subscribed: true }, { new: true });
+        console.log(user);
+        res.json({ session });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 }
 
 module.exports = {
@@ -68,4 +184,9 @@ module.exports = {
     getUsersByID,
     getUser,
     subscribe,
+    subscribed,
+    stripeAccount,
+    stripeAccountLink,
+    stripeProducts,
+    checkout,
 };
