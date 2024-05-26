@@ -12,6 +12,10 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    language:{
+        type: String,
+        default: 'es'
+    },
     schedule: {
         type: [Object],
         properties: {
@@ -23,6 +27,13 @@ const userSchema = new mongoose.Schema({
     },
     picture : {
         type: String
+    },
+    subscribed: {
+        type: Boolean,
+        default: false
+    },
+    stripeAccount: {
+        type: String,
     }
 })
 
