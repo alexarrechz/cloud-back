@@ -5,6 +5,15 @@ const conversationSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    present: {
+        type: Boolean,
+        default: false
+    },
+    defaultLanguage: {
+        type: String,
+        required: true,
+        default: 'es'
+    },
     user: {
         type: Object,
         properties: {
@@ -13,7 +22,19 @@ const conversationSchema = new mongoose.Schema({
         },
         required: true
     },
-    messages: {
+    originalMessages: {
+        type: [Object],
+        properties: {
+            content: { type: String, required: true },
+            date: { type: Date, required: true },
+            user: {
+                type: Object, properties: {
+                    name: { type: String, required: true },
+                }, required: true
+            }
+        }
+    },
+    translatedMessages: {
         type: [Object],
         properties: {
             content: { type: String, required: true },
