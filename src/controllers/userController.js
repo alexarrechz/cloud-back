@@ -25,7 +25,6 @@ const getAllUsers = async (req, res) => {
 const getUsersByID = async (req, res) => {
     if (!req.params.id) return res.status(400).json({ message: 'No id provided' });
     const user = await User.findOne({ _id: req.params.id });
-    console.log(user);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
 }
@@ -35,14 +34,12 @@ const getUser = async (req, res) => {
 }
 
 const updateUser = async (req, res) => {
-    console.log(req.body);
     const { companyName, phone, description, picture } = req.body;
     const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { companyName, phone, description, picture }, { new: true });
     res.json(user);
 }
 
 const subscribe = async (req, res) => {
-    console.log("Usuario", req.user);
     try {
         const session = await stripe.checkout.sessions.create({
             mode: 'subscription',
@@ -56,12 +53,8 @@ const subscribe = async (req, res) => {
             success_url: `${process.env.REDIRECT_URI}/mas/success`,
             cancel_url: `${process.env.REDIRECT_URI}/mas/cancel`,
         });
-
-        console.log(session);
-
         // Update user subscription status
         const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { subscribed: true }, { new: true });
-        console.log(user);
         res.json({ session });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -89,8 +82,7 @@ const stripeAccount = async (req, res) => {
         }
 
         const account = await stripe.accounts.create({});
-        console.log(account);
-        
+
         await User.findOneAndUpdate({ _id: req.user._id.toString() }, { stripeAccount: account.id });
 
         res.json({
@@ -111,7 +103,6 @@ const stripeAccountLink = async (req, res) => {
     try {
 
         const user = await User.findOne({ _id: req.user._id.toString() });
-        console.log("link",user);
 
         if (!user.stripeAccount) {
             return res.status(400).json({ error: "User does not have a Stripe account" });
@@ -136,8 +127,9 @@ const stripeAccountLink = async (req, res) => {
 }
 
 const stripeProducts = async (req, res) => {
+    const { id } = req.params;
     try {
-        const user = await User.findOne({ _id: req.user._id.toString() });
+        const user = await User.findOne({ _id: id });
 
         const stripe_account = await stripe.accounts.retrieve(user.stripeAccount);
 
@@ -145,15 +137,40 @@ const stripeProducts = async (req, res) => {
             stripeAccount: stripe_account.id,
         });
 
-        for(let i = 0; i < products.data.length; i++){
-            const prices = await stripe.prices.list(products.data[i].defaul_price,{
+        for (let i = 0; i < products.data.length; i++) {
+            const prices = await stripe.prices.list(products.data[i].defaul_price, {
                 stripeAccount: stripe_account.id,
             });
             products.data[i].prices = prices.data[0];
         }
 
-        console.log(products);
         res.json(products);
+    } catch (error) {
+        console.error(
+            "An error occurred when calling the Stripe API to list products:",
+            error
+        );
+        res.status(500);
+        res.send({ error: error.message });
+    }
+}
+const stripeProduct = async (req, res) => {
+    const { id, price } = req.params;
+    try {
+        const user = await User.findOne({ _id: id });
+
+        const stripe_account = await stripe.accounts.retrieve(user.stripeAccount);
+
+        const product = await stripe.products.retrieve(price, {
+            stripeAccount: stripe_account.id,
+        });
+
+        const prices = await stripe.prices.list(product.defaul_price, {
+            stripeAccount: stripe_account.id,
+        });
+        product.prices = prices.data[0];
+
+        res.json(product);
     } catch (error) {
         console.error(
             "An error occurred when calling the Stripe API to list products:",
@@ -165,7 +182,7 @@ const stripeProducts = async (req, res) => {
 }
 
 const checkout = async (req, res) => {
-    const { priceId } = req.body;
+    const { priceId, successUrl, cancelUrl, quantity = 1 } = req.body;
     try {
         const session = await stripe.checkout.sessions.create({
             mode: 'payment',
@@ -173,23 +190,30 @@ const checkout = async (req, res) => {
             line_items: [
                 {
                     price: priceId,
-                    quantity: 1,
+                    quantity,
                 },
             ],
-            success_url: `${process.env.REDIRECT_URI}/mas/success`,
-            cancel_url: `${process.env.REDIRECT_URI}/mas/cancel`,
-            
-        }, { stripeAccount: req.user.stripeAccount });
+            success_url: successUrl,
+            cancel_url: cancelUrl,
 
-        console.log(session);
+        }, { stripeAccount: req.user.stripeAccount });
 
         // Update user subscription status
         const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { subscribed: true }, { new: true });
-        console.log(user);
         res.json({ session });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+}
+
+const getSettings = (req, res) => {
+    res.json(req.user.settings);
+}
+
+const updateSettings = async (req, res) => {
+    const { settings } = req.body;
+    const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { settings }, { new: true });
+    res.json(user.settings);
 }
 
 module.exports = {
@@ -198,10 +222,13 @@ module.exports = {
     getAllUsers,
     getUsersByID,
     getUser,
+    getSettings,
+    updateSettings,
     subscribe,
     subscribed,
     stripeAccount,
     stripeAccountLink,
     stripeProducts,
+    stripeProduct,
     checkout,
 };
