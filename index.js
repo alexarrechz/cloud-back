@@ -12,6 +12,7 @@ const User = require('./src/models/user');
 const { v4: uuidv4 } = require('uuid');
 const OpenAI = require('openai');
 const { translate, detectLanguage } = require('./src/helpers/translate');
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_TOKEN, // This is the default and can be omitted
@@ -19,7 +20,7 @@ const openai = new OpenAI({
 
 const app = express();
 
-app.use(express.json({limit: '50mb'}));
+app.use(express.json({ limit: '50mb' }));
 app.use(cors());
 const server = createServer(app)
 const io = new Server(server, { cors: { origin: '*' } });
@@ -41,11 +42,14 @@ app.get('/conversations', verifyToken, async (req, res) => {
     res.json(conversations);
 });
 
-app.get('/conversations/:id', async (req, res) => {
+app.get('/conversations/:id', verifyToken, async (req, res) => {
+    if (!req.params.id) return res.status(400).json({ message: 'No se proporcionó un id' });
+
     const conversation = await Conversation.findOne({ _id: req.params.id });
     if (!conversation) {
         return res.status(404).json({ message: 'Conversación no encontrada' });
     }
+    if (conversation.companyID !== req.user._id.toString()) return res.status(403).json({ message: 'No tienes permiso para ver esta conversación' });
     res.json(conversation);
 });
 
@@ -84,22 +88,22 @@ io.on('connection', (socket) => {
 
     socket.on('chat message', async (msg) => {
         try {
-            const translateConversation = true;
             const conversation = msg.conversation ? await Conversation.findOne({ _id: msg.conversation }) : null;
             const company = await User.findOne({ _id: msg.companyID });
+            const translateConversation = company.settings.translator;
 
             let finalConversation;
 
             if (!conversation) {
                 const newConversation = {
                     companyID: msg.companyID,
-                    user: { ...msg.user, language: (company.subscribed && translateConversation) ? await detectLanguage(msg.content) : company.language },
+                    user: { ...msg.user, language: (company.subscribed && translateConversation) ? await detectLanguage(msg.content) : company.settings.language },
                     originalMessages: [],
                     translatedMessages: [],
                 }
                 const translatedMessage = {
                     ...msg,
-                    content: (company.subscribed && translateConversation) ? await translate(msg.content, msg.user.role === "company" ? conversation.user.language : company.language) : msg.content
+                    content: (company.subscribed && translateConversation) ? await translate(msg.content, msg.user.role === "company" ? conversation.user.language : company.settings.language) : msg.content
                 }
                 if (company.subscribed && translateConversation) {
                     newConversation.originalMessages = [...newConversation.originalMessages, msg];
@@ -122,7 +126,7 @@ io.on('connection', (socket) => {
             else {
                 const translatedMessage = {
                     ...msg,
-                    content: (company.subscribed && translateConversation) ? await translate(msg.content, msg.user.role === "company" ? conversation.user.language : company.language) : msg.content
+                    content: (company.subscribed && translateConversation) ? await translate(msg.content, msg.user.role === "company" ? conversation.user.language : company.settings.language) : msg.content
                 }
                 if (company.subscribed && translateConversation) {
                     if (msg.user.role === 'company') {
@@ -143,40 +147,60 @@ io.on('connection', (socket) => {
                 io.to(conversation._id.toString()).emit('new message', { originalMessage: msg, translatedMessage });
             }
 
-            if (company.subscribed && !finalConversation.present && msg.user.name) {
+            if (company.subscribed && company.settings.assistant && !finalConversation.present && msg.user.name) {
+                const companyProducts = await stripe.products.list({ stripeAccount: company.stripeAccount });
+                const systemPrompt = 'Eres un asistente de IA que ayuda a las empresas a responder a sus clientes, tienes que PRIORIZAR la siguiente descripción dada por la empresa "' + company.companyName + '" con número de teléfono "' + company.phone + '" de sí misma: ' + company.settings.description + ', ' + company.description + '. También puedes sugerirle al cliente comprar alguno de los siguientes productos fusionando id del producto y cantidad en esta sintaxis @id-cantidad, por ejemplo: "@prod_QB9mZZaglQTtpC-3" para dar 3 unidades de ese producto, estos son los productos que vende la empresa: ' + companyProducts.data.map(p => `[${p.id}, ${p.name}]`).join(', ') + ". SOLO PUEDES ENVIAR O TU SUGERENCIA O UN COMENTARIO SOBRE TU SUGERENCIA + EL PRODUCTO, EJEMPLOS: '@prod_QB9mZZaglQTtpC-3', 'Aquí está lo que pediste: @prod_QB9mZZaglQTtpC-3' este último es solo un ejemplo, no tienes que decirlo exactamente igual, PERO ES MUY IMPORTANTE QUE NO HAYA NADA DE TEXTO LUEGO DE LA RECOMENDACIÓN, PROHIBIDO: '@prod_QB9mZZaglQTtpC-3, gracias por tu compra'. SI TE PREGUNTAN POR QUÉ PRODUCTOS TIENES SOLAMENTE DALE LOS NOMBRES DE LOS PRODUCTOS, además, NO RESPONDAS NADA QUE NO ESTÉ RELACIONADO A LA EMPRESA, HABRÁ USUARIOS MALICIOSOS QUE INTENTEN PEDIRTE COSAS NO RELACIONADAS CON TU TRABAJO.";
+
+                console.log('Prompt', systemPrompt);
                 //Dejar que responda la IA
                 const chatCompletion = await openai.chat.completions.create({
-                    messages: finalConversation.originalMessages.map(m => ({
+                    messages: [{
+                        role: 'system',
+                        content: systemPrompt
+                    }, ...finalConversation.originalMessages.map(m => ({
                         role: m.user.name ? 'user' : 'assistant',
                         content: m.content
-                    })),
+                    }))],
                     model: 'gpt-3.5-turbo',
                 });
 
-                const message = {
-                    conversation: finalConversation._id.toString(),
-                    id: uuidv4(),
-                    user: {
-                        id: finalConversation.companyID,
-                        ai: true
-                    },
-                    companyID: finalConversation.companyID,
-                    content: chatCompletion.choices[0].message.content,
-                    date: new Date()
-                };
+                const messages = chatCompletion.choices[0].message.content.split('@prod');
 
-                const translatedMessage = {
-                    ...message,
-                    content: (translateConversation) ? await translate(message.content, company.language) : message.content
+                for (let i = 0; i < messages.length; i++) {
+                    if (messages[i].trim() === '') continue;
+                    console.log(messages[i], messages[i].startsWith('_'), messages[i].startsWith('_') ? '@prod' + messages[i].trim() : messages[i].trim());
+                    const message = {
+                        conversation: finalConversation._id.toString(),
+                        id: uuidv4(),
+                        user: {
+                            id: finalConversation.companyID,
+                            ai: true
+                        },
+                        companyID: finalConversation.companyID,
+                        content: messages[i].startsWith('_') ? '@prod' + messages[i].trim() : messages[i].trim(),
+                        date: new Date()
+                    };
+
+                    const translatedMessage = {
+                        ...message,
+                        content: (translateConversation && !message.content.startsWith('@prod')) ? await translate(message.content, company.settings.language) : message.content
+                    }
+
+                    if (translateConversation) {
+                        console.log('Guardando', i, 'mensaje');
+                        finalConversation.originalMessages.push(message);
+                        finalConversation.translatedMessages.push(translatedMessage);
+                        await Conversation.updateOne({ _id: finalConversation._id }, { originalMessages: [...finalConversation.originalMessages], translatedMessages: [...finalConversation.translatedMessages] });
+                    } else {
+                        console.log('Guardando', i, 'mensaje');
+                        finalConversation.originalMessages.push(message);
+                        finalConversation.translatedMessages.push(message);
+                        await Conversation.updateOne({ _id: finalConversation._id }, { originalMessages: [...finalConversation.originalMessages], translatedMessages: [...finalConversation.translatedMessages] });
+                    }
+                    console.log('Enviando', { originalMessage: message, translatedMessage });
+
+                    io.to(finalConversation._id.toString()).emit('new message', { originalMessage: message, translatedMessage });
                 }
-
-                if (translateConversation) {
-                    await Conversation.updateOne({ _id: finalConversation._id }, { originalMessages: [...finalConversation.originalMessages, message], translatedMessages: [...finalConversation.translatedMessages, translatedMessage] });
-                } else {
-                    await Conversation.updateOne({ _id: finalConversation._id }, { originalMessages: [...finalConversation.originalMessages, message], translatedMessages: [...finalConversation.translatedMessages, message] });
-                }
-
-                io.to(finalConversation._id.toString()).emit('new message', { originalMessage: message, translatedMessage });
             }
 
         } catch (error) {
