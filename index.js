@@ -161,7 +161,7 @@ io.on('connection', (socket) => {
                         role: m.user.name ? 'user' : 'assistant',
                         content: m.content
                     }))],
-                    model: 'gpt-3.5-turbo',
+                    model: process.env.CHAT_MODEL,
                 });
 
                 const messages = chatCompletion.choices[0].message.content.split('@prod');
