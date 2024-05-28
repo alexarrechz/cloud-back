@@ -17,7 +17,7 @@ const translate = async (text, language, corrector = false) => {
                 content: text,
             },
         ],
-        model: 'gpt-3.5-turbo',
+        model: process.env.TRANSLATE_MODEL,
     });
 
     console.log(chatCompletion.choices[0].message.content);
