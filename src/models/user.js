@@ -12,14 +12,14 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    language:{
+    language: {
         type: String,
         default: 'es'
     },
     description: {
         type: String,
     },
-    picture : {
+    picture: {
         type: String
     },
     subscribed: {
@@ -28,7 +28,21 @@ const userSchema = new mongoose.Schema({
     },
     stripeAccount: {
         type: String,
-    }
+    },
+    prompt: {
+        type: String,
+        default: ""
+    },
+    settings: {
+        type: Object,
+        default: {
+            assistant: true,
+            language: "Español",
+            description: "",
+            correctText: true,
+            translator: true
+        }
+    },
 })
 
 module.exports = mongoose.model('User', userSchema);
