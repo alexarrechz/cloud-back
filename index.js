@@ -103,7 +103,7 @@ io.on('connection', (socket) => {
                 }
                 const translatedMessage = {
                     ...msg,
-                    content: (company.subscribed && translateConversation) ? await translate(msg.content, msg.user.role === "company" ? conversation.user.language : company.settings.language) : msg.content
+                    content: (company.subscribed && translateConversation) ? await translate(msg.content, msg.user.role === "company" ? conversation.user.language : company.settings.language, company.settings.correctText) : msg.content
                 }
                 if (company.subscribed && translateConversation) {
                     newConversation.originalMessages = [...newConversation.originalMessages, msg];
@@ -126,7 +126,7 @@ io.on('connection', (socket) => {
             else {
                 const translatedMessage = {
                     ...msg,
-                    content: (company.subscribed && translateConversation) ? await translate(msg.content, msg.user.role === "company" ? conversation.user.language : company.settings.language) : msg.content
+                    content: (company.subscribed && translateConversation) ? await translate(msg.content, msg.user.role === "company" ? conversation.user.language : company.settings.language, company.settings.correctText) : msg.content
                 }
                 if (company.subscribed && translateConversation) {
                     if (msg.user.role === 'company') {
@@ -183,7 +183,7 @@ io.on('connection', (socket) => {
 
                     const translatedMessage = {
                         ...message,
-                        content: (translateConversation && !message.content.startsWith('@prod')) ? await translate(message.content, company.settings.language) : message.content
+                        content: (translateConversation && !message.content.startsWith('@prod')) ? await translate(message.content, company.settings.language, company.settings.correctText) : message.content
                     }
 
                     if (translateConversation) {

@@ -5,12 +5,12 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_TOKEN, // This is the default and can be omitted
 });
 
-const translate = async (text, language) => {
+const translate = async (text, language, corrector = false) => {
     const chatCompletion = await openai.chat.completions.create({
         messages: [
             {
                 role: 'system',
-                content: `Translate this text to ${language}, I just need the translation, nothing else`,
+                content: `Translate this text to ${language}, I just need the translation, nothing else, if you detect that the text is already in ${language}, ${corrector ? 'try to correct its ortography' : "just return the same text without changes"}`,
             },
             {
                 role: 'user',
@@ -30,7 +30,7 @@ const detectLanguage = async (text) => {
         messages: [
             {
                 role: 'system',
-                content: 'Detect the language of this text, I just need the language, nothing else',
+                content: 'Detecta el lenguaje utilizado en este texto, solo necesito el lenguaje, nada más.',
             },
             {
                 role: 'user',
