@@ -18,6 +18,7 @@ const addUser = async (req, res) => {
 }
 
 const getAllUsers = async (req, res) => {
+    if(!req.user.admin) return res.status(403).json({ message: 'Unauthorized' });
     const users = await User.find();
     res.json(users);
 }
@@ -216,6 +217,13 @@ const updateSettings = async (req, res) => {
     res.json(user.settings);
 }
 
+const toggleAdmin = async (req, res) => {
+    const user = await User.findOne({ _id: req.params.id });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const updatedUser = await User.findOneAndUpdate({ _id: req.params.id }, { admin: !user.admin }, { new: true });
+    res.json(updatedUser);
+}
+
 module.exports = {
     addUser,
     updateUser,
@@ -223,6 +231,7 @@ module.exports = {
     getUsersByID,
     getUser,
     getSettings,
+    toggleAdmin,
     updateSettings,
     subscribe,
     subscribed,
