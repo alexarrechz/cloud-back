@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const verifyToken = require('./src/middlewares/verifyToken');
 const Conversation = require('./src/models/conversation');
 const auth = require('./src/routes/auth');
+const faq = require('./src/routes/faq');
 const User = require('./src/models/user');
 const { v4: uuidv4 } = require('uuid');
 const OpenAI = require('openai');
@@ -31,7 +32,8 @@ mongoose.connection.on('error', (error) => console.error(error))
 mongoose.connection.once('open', () => console.log('Connected to Database'))
 
 app.use('/users', user);
-app.use('/auth', auth)
+app.use('/faq', faq)
+app.use('/auth', auth);
 
 app.get('/', (req, res) => {
     res.send('¡Hola Mundo!');
