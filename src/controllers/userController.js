@@ -18,7 +18,7 @@ const addUser = async (req, res) => {
 }
 
 const getAllUsers = async (req, res) => {
-    if(!req.user.admin) return res.status(403).json({ message: 'Unauthorized' });
+    if (!req.user.admin) return res.status(403).json({ message: 'Unauthorized' });
     const users = await User.find();
     res.json(users);
 }
@@ -131,6 +131,7 @@ const stripeProducts = async (req, res) => {
     const { id } = req.params;
     try {
         const user = await User.findOne({ _id: id });
+        if(!user.stripeAccount) return res.status(400).json({ message: 'No Stripe account linked' });
 
         const stripe_account = await stripe.accounts.retrieve(user.stripeAccount);
 
@@ -143,6 +144,7 @@ const stripeProducts = async (req, res) => {
                 stripeAccount: stripe_account.id,
             });
             products.data[i].prices = prices.data[0];
+            products.data[i].companyId = id;
         }
 
         res.json(products);
@@ -170,6 +172,7 @@ const stripeProduct = async (req, res) => {
             stripeAccount: stripe_account.id,
         });
         product.prices = prices.data[0];
+        product.companyId = id;
 
         res.json(product);
     } catch (error) {
@@ -183,10 +186,15 @@ const stripeProduct = async (req, res) => {
 }
 
 const checkout = async (req, res) => {
-    const { priceId, successUrl, cancelUrl, quantity = 1 } = req.body;
+    const { companyId, productId, priceId, successUrl, cancelUrl, quantity = 1 } = req.body;
+    if(companyId === "undefined") return res.status(400).json({ message: 'No company ID provided' });
     try {
+
+        const user = await User.findOne({ _id: companyId });
+        const code = Math.random().toString(36).substring(7);
+
         const session = await stripe.checkout.sessions.create({
-            mode: 'payment',
+            mode: priceId == plan ? 'subscription' : 'payment',
             payment_method_types: ['card'],
             line_items: [
                 {
@@ -194,18 +202,44 @@ const checkout = async (req, res) => {
                     quantity,
                 },
             ],
-            success_url: successUrl,
+            success_url: `${successUrl}?code=${code}&`,
             cancel_url: cancelUrl,
+            client_reference_id: code,
+            metadata: { code, product: productId, quantity },
+        }, { stripeAccount: user.stripeAccount });
 
-        }, { stripeAccount: req.user.stripeAccount });
 
-        // Update user subscription status
-        const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { subscribed: true }, { new: true });
+        if (priceId === plan) {
+            const user = await User.findOneAndUpdate({ _id: req.user._id.toString() }, { subscribed: true }, { new: true });
+        }
         res.json({ session });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 }
+
+const getPayouts = async (req, res) => {
+    const payouts = await stripe.checkout.sessions.list({
+        stripeAccount: req.user.stripeAccount,
+    });
+    const products = [];
+    
+    for (let i = 0; i < payouts.data.length; i++) {
+        console.log(payouts.data[i].metadata);
+        if(!payouts.data[i].metadata.code || !payouts.data[i].metadata.product || !payouts.data[i].metadata.quantity) continue;
+        const product = await stripe.products.retrieve(payouts.data[i].metadata.product, {
+            stripeAccount: req.user.stripeAccount,
+        });
+        product.quantity = payouts.data[i].metadata.quantity;
+        product.code = payouts.data[i].metadata.code;
+        products.push(product);
+    }
+    
+    console.log(products);
+    res.json(products);
+}
+
+
 
 const getSettings = (req, res) => {
     res.json(req.user.settings);
@@ -229,6 +263,7 @@ module.exports = {
     updateUser,
     getAllUsers,
     getUsersByID,
+    getPayouts,
     getUser,
     getSettings,
     toggleAdmin,

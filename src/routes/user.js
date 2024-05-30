@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const verifyToken = require('../middlewares/verifyToken');
-const { getUser, getUsersByID, getAllUsers, addUser, subscribe, subscribed, stripeAccountLink, stripeAccount, stripeProducts, stripeProduct, checkout, updateUser, getSettings, updateSettings, toggleAdmin } = require('../controllers/userController');
+const { getUser, getUsersByID, getAllUsers, addUser, subscribe, subscribed, stripeAccountLink, stripeAccount, stripeProducts, stripeProduct, checkout, updateUser, getSettings, updateSettings, toggleAdmin, getPayouts } = require('../controllers/userController');
 
 router.post('/', addUser);
 router.patch('/', verifyToken, updateUser);
@@ -21,7 +21,8 @@ router.post('/account/link', verifyToken, stripeAccountLink);
 
 router.get('/account/products/:id', stripeProducts)
 router.get('/account/product/:id/:price', stripeProduct)
-router.post('/checkout', verifyToken, checkout)
+router.post('/checkout', checkout)
+router.get('/account/payouts', verifyToken, getPayouts)
 
 
 module.exports = router;
